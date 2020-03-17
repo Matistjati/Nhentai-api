@@ -7,6 +7,20 @@ from concurrent.futures import ThreadPoolExecutor
 RESPONSE_OK = 200
 RESPONSE_BUSY = 503
 
+class Page:
+    def __init__(self, image, page_number, downloaded, bad):
+        self.image = image
+        self.page_number = page_number
+        self.downloaded = downloaded
+        self.bad = bad
+
+    @staticmethod
+    def concurrent_init(self, image, page_number, downloaded, bad):
+        self.image = image
+        self.page_number = page_number
+        self.downloaded = downloaded
+        self.bad = bad
+
 class Book:
     # Get some info about the book via an api call about the book, which will grant info such as media id and page count
     # Example: https://nhentai.net/api/gallery/233960
@@ -47,12 +61,23 @@ class Book:
         self.media_id = self.book_info["media_id"]
         self.page_count = self.book_info["num_pages"]
         self.name = self.book_info["title"]["english"]
+        self.images = {}
 
     def GetCover(self):
         url = f"https://t.nhentai.net/galleries/{self.media_id}/cover.jpg"
         response = requests.get(url)
         file = BytesIO(response.content)
         file.name = "cover.jpg"
+        return file
+
+    def GetPage(self, page):
+        type = self.book_info["images"]["pages"][page - 1]["t"]
+        type = "jpg" if type == "j" else "png"
+        url = f"https://i.nhentai.net/galleries/{self.media_id}/{page}.{type}"
+        print(url)
+        response = requests.get(url)
+        file = BytesIO(response.content)
+        file.name = f"{page}.{type}"
         return file
         
     def SaveImage(self, path, page, imageType):
@@ -96,6 +121,39 @@ class Book:
             imageDownloader.submit(self, path + "/" + str(page + 1), page + 1)
 
         imageDownloader.shutdown()
+
+    @staticmethod
+    def CacheImage(self, page):
+        image = Book.GetPage(self, page.page_number)
+        downloaded = False
+        bad = True
+        if image.getbuffer().nbytes > 0:
+            bad = False
+            downloaded = True
+        Page.concurrent_init(page, image, page.page_number, downloaded, bad)
+
+    def CacheImages(self, center, amountLeft, amountRight):
+        for i in range(center - amountLeft, center + amountRight + 1):
+            if i < 0:
+                i = self.page_count + i + 1
+
+            if i in self.images and self.images[i].downloaded == True:
+                continue
+            self.images[i] = Page(BytesIO(), i, False, False)
+
+        executor = ThreadPoolExecutor(len(range(center - amountLeft, center + amountRight + 1)))
+
+        for i in range(center - amountLeft, center + amountRight + 1):
+            if i in self.images and self.images[i].downloaded == True:
+                continue
+            if i < 0:
+                i = self.page_count + i + 1
+
+            executor.submit(Book.CacheImage(self, self.images[i]))
+
+        #executor.shutdown()
+
+
 
 # Method to create a book. Must be outside a class to avoid python's multithreading headaches
 def CreateBook(id, bookList, i):

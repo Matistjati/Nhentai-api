@@ -151,8 +151,17 @@ class Book:
 
             executor.submit(Book.CacheImage(self, self.images[i]))
 
-        #executor.shutdown()
+        executor.shutdown()
 
+
+    def get_image_link(self, page):
+        if page == 0:
+            return f"https://t.nhentai.net/galleries/{self.media_id}/cover.jpg"
+
+        type = self.book_info["images"]["pages"][page - 1]["t"]
+        type = "jpg" if type == "j" else "png"
+        url = f"https://i.nhentai.net/galleries/{self.media_id}/{page}.{type}"
+        return url
 
 
 # Method to create a book. Must be outside a class to avoid python's multithreading headaches

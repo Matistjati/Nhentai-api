@@ -112,7 +112,7 @@ class Book:
         type = ".jpg" if type == "j" else ".png"
 
         # Save the image
-        self.SaveImage(dir + type, page, type)
+        self.save_image(dir + type, page, type)
 
 
     def save_all_images(self, path):
@@ -125,12 +125,12 @@ class Book:
         for page in range(self.page_count):
             image_downloader.submit(self, path + "/" + str(page + 1), page + 1)
 
-            image_downloader.shutdown()
+        image_downloader.shutdown()
 
 
     @staticmethod
     def cache_image(self, page):
-        image = Book.GetPage(self, page.page_number)
+        image = Book.get_page(self, page.page_number)
         downloaded = False
         bad = True
         if image.getbuffer().nbytes > 0:
@@ -156,7 +156,7 @@ class Book:
             if i < 0:
                 i = self.page_count + i + 1
 
-            executor.submit(Book.CacheImage(self, self.images[i]))
+            executor.submit(Book.cache_image(self, self.images[i]))
 
         executor.shutdown()
 
@@ -193,7 +193,7 @@ class Search:
         self.query = query
         self.popular = popular
         self.page = page
-        self.searchInfo = self.GetSearchInfo()
+        self.searchInfo = self.get_search_info()
         self.result = self.searchInfo["result"]
         self.books = []
 
@@ -203,7 +203,7 @@ class Search:
 
         # Initialize books concurrently, as making all api requests asking about books with a single thread is slow
         for i, book in enumerate(self.result):
-            executor.submit(create_book, self, book["id"], i)
+            executor.submit(Search.create_book, self, book["id"], i)
 
         # Wait for all books to be initialized properly. Could be optimized by proceeding with the ones that are done?
         executor.shutdown()
@@ -218,7 +218,7 @@ class Search:
         for page in range(book.page_count):
             image_downloader.submit(book, dir + "/" + str(page + 1), page + 1)
 
-            image_downloader.shutdown()
+        image_downloader.shutdown()
 
 
     def download_books(self, directory):

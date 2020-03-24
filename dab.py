@@ -1,10 +1,3 @@
-# Nhentai api
-
-Yet another object-oriented nhentai api. Will multithread when downloading multiple things at once, such as entire books
-
-## Example usage
-
-```
 from nhentai_api import *
 
 id = 123946
@@ -17,4 +10,3 @@ if not os.path.exists(book_dir):
 
 # Save all the pages of the book
 book.save_all_images(book_dir)
-```

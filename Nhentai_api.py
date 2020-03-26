@@ -8,17 +8,17 @@ RESPONSE_OK = 200
 RESPONSE_BUSY = 503
 
 class Page:
-    def __init__(self, image, page_number, downloaded, bad):
+    def __init__(self, image, page_number, response, bad):
         self.image = image
         self.page_number = page_number
-        self.downloaded = downloaded
+        self.response = response
         self.bad = bad
 
     @staticmethod
-    def concurrent_init(self, image, page_number, downloaded, bad):
+    def concurrent_init(self, image, page_number, response, bad):
         self.image = image
         self.page_number = page_number
-        self.downloaded = downloaded
+        self.response = response
         self.bad = bad
 
 class Book:
@@ -64,9 +64,10 @@ class Book:
         self.name = self.book_info["title"]["english"]
         self.images = {}
 
-
+    
     def get_image_link(self, page):
         if page == 0:
+            # If the page is 0, we return the cover. This is (hopefully) always a jpg named cover.jpg
             return f"https://t.nhentai.net/galleries/{self.media_id}/cover.jpg"
 
         type = self.book_info["images"]["pages"][page - 1]["t"]

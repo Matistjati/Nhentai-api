@@ -57,6 +57,7 @@ class Book:
             return
 
         self.favorites = self.book_info["num_favorites"]
+        self.upload_date = int(self.book_info["upload_date"])
         
         # The media id is used to get the pages from a book.
         # Example https://i.nhentai.net/galleries/770497/8.jpg

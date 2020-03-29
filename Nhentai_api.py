@@ -56,6 +56,8 @@ class Book:
             self.bad = True
             return
 
+        self.favorites = self.book_info["num_favorites"]
+        
         # The media id is used to get the pages from a book.
         # Example https://i.nhentai.net/galleries/770497/8.jpg
         # Where 770497 is the media id and 8 is the page number

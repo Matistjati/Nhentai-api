@@ -80,7 +80,9 @@ class Book:
 
     def get_image_link(self, page):
         if page == 0:
-            return f"https://t.nhentai.net/galleries/{self.media_id}/cover.jpg"
+            type = self.book_info["images"]["cover"]["t"]
+            type = "jpg" if type == "j" else "png"
+            return f"https://t.nhentai.net/galleries/{self.media_id}/cover.{type}"
 
         type = self.book_info["images"]["pages"][page - 1]["t"]
         type = "jpg" if type == "j" else "png"

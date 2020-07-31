@@ -73,6 +73,10 @@ class Book:
         with open(path, 'wb') as file:
             file.write(response.content)
 
+    def get_image_link(self, page):
+        type = self.book_info["images"]["pages"][page - 1]["t"]
+        type = ".jpg" if type == "j" else ".png"
+        return f"https://i.nhentai.net/galleries/{self.media_id}/{page}.{type}"
 
     # A method for calling saveImage, has to be this way as python cannot pickle class members
     # Here Book is also a function, which when called downloads a book of the provided id

@@ -28,7 +28,7 @@ class Book:
 
         while True:
             url = "https://nhentai.net/api/gallery/" + str(self.book_id)
-            resp = requests.get(url=url)
+            resp = requests.get(url=url, verify=True)
 
             # The response will be the html of the response page
             # If we are good to go, return the json

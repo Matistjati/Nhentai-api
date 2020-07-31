@@ -77,7 +77,7 @@ class Book:
             return f"https://t.nhentai.net/galleries/{self.media_id}/cover.jpg"
         else:
             image_type = self.book_info["images"]["pages"][page - 1]["t"]
-            image_type = "jpg" if type == "j" else "png"
+            image_type = "jpg" if image_type == "j" else "png"
             return f"https://i.nhentai.net/galleries/{self.media_id}/{page}.{image_type}"
 
     # A method for calling saveImage, has to be this way as python cannot pickle class members

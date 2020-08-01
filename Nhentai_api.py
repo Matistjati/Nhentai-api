@@ -7,36 +7,16 @@ from concurrent.futures import ThreadPoolExecutor
 RESPONSE_OK = 200
 RESPONSE_BUSY = 503
 
+
 class ApiConfig:
     verify_ssl = True
     retry_wait_time = 0.5
 
+
 class Book:
     book_info: dict
 
-    # Get some info about the book via an api call about the book, which will grant info such as media id and page count
-    # Example: https://nhentai.net/api/gallery/233960
-    def get_book_info(self):
-
-        while True:
-            url = "https://nhentai.net/api/gallery/" + str(self.book_id)
-            resp = requests.get(url=url, verify=ApiConfig.verify_ssl)
-
-            # The response will be the html of the response page
-            # If we are good to go, return the json
-            if resp.status_code == RESPONSE_OK:
-                data = resp.json()
-                return data
-            # If the server is busy, try again
-            elif resp.status_code == RESPONSE_BUSY:
-                continue
-            # If there is another error which we do not know how to handle, signal an error by returning ""
-            # We also print the error to give the developer a heads up
-            else:
-                print("a man has fallen into the lego river because of " + str(resp.status_code))
-                return ""
-
-    # Initialize a book given a book id
+    # Initialize a book given a book id or book info json
     def __init__(self, book_id, book_info=None):
         if book_info is None:
             self.book_id = book_id
@@ -59,6 +39,28 @@ class Book:
         self.name = self.book_info["title"]["english"]
 
 
+    # Get some info about the book via an api call about the book, which will grant info such as media id and page count
+    # Example: https://nhentai.net/api/gallery/233960
+    def get_book_info(self):
+        while True:
+            url = "https://nhentai.net/api/gallery/" + str(self.book_id)
+            resp = requests.get(url=url, verify=ApiConfig.verify_ssl)
+
+            # The response will be the html of the response page
+            # If we are good to go, return the json
+            if resp.status_code == RESPONSE_OK:
+                data = resp.json()
+                return data
+            # If the server is busy, try again
+            elif resp.status_code == RESPONSE_BUSY:
+                continue
+            # If there is another error which we do not know how to handle, signal an error by returning ""
+            # We also print the error to give the developer a heads up
+            else:
+                print("a man has fallen into the lego river because of " + str(resp.status_code))
+                return ""
+
+
     def get_image_type(self, page):
         if page == 0:
             image_type = self.book_info["images"]["thumbnail"]["t"]
@@ -74,9 +76,15 @@ class Book:
             return "jpg"
 
 
+    def get_image_link(self, page):
+        if page == 0:
+            return f"https://t.nhentai.net/galleries/{self.media_id}/cover.{self.get_image_type(0)}"
+        else:
+            return f"https://i.nhentai.net/galleries/{self.media_id}/{page}.{self.get_image_type(page)}"
+
+
     def get_cover(self):
-        url = f"https://t.nhentai.net/galleries/{self.media_id}/cover.jpg"
-        response = requests.get(url, verify=ApiConfig.verify_ssl)
+        response = requests.get(self.get_image_link(0), verify=ApiConfig.verify_ssl)
         file = BytesIO(response.content)
         file.name = "cover.jpg"
         return file
@@ -116,16 +124,9 @@ class Book:
             print(e)
 
 
-
     def save_image(self, path, page):
         save_image(self.media_id, path, page, self.get_image_link(page))
 
-
-    def get_image_link(self, page):
-        if page == 0:
-            return f"https://t.nhentai.net/galleries/{self.media_id}/cover.{self.get_image_type(0)}"
-        else:
-            return f"https://i.nhentai.net/galleries/{self.media_id}/{page}.{self.get_image_type(page)}"
 
     def save_all_images(self, path):
         if self.bad:
@@ -138,8 +139,6 @@ class Book:
             image_downloader.submit(Book.save_image_full, self.media_id, f"{path}/{self.name}/{'cover' if page == 0 else page}.{self.get_image_type(page)}", page, self.get_image_type(page))
 
         image_downloader.shutdown()
-
-# Method to create a book. Must be outside a class to avoid python's multithreading headaches
 
 
 class Search:

@@ -6,6 +6,9 @@ from concurrent.futures import ThreadPoolExecutor
 RESPONSE_OK = 200
 RESPONSE_BUSY = 503
 
+class ApiConfig:
+    verify_ssl = True
+
 class Book:
     # Get some info about the book via an api call about the book, which will grant info such as media id and page count
     # Example: https://nhentai.net/api/gallery/233960
@@ -13,7 +16,7 @@ class Book:
 
         while True:
             url = "https://nhentai.net/api/gallery/" + str(self.book_id)
-            resp = requests.get(url=url, verify=False)
+            resp = requests.get(url=url, verify=ApiConfig.verify_ssl, headers = {'User-agent': 'Nhentai-api'})
 
             # The response will be the html of the response page
             # If we are good to go, return the json
@@ -49,11 +52,11 @@ class Book:
 
     def GetCover(self):
         url = f"https://t.nhentai.net/galleries/{self.media_id}/cover.jpg"
-        response = requests.get(url, verify=False)
+        response = requests.get(url, verify=ApiConfig.verify_ssl)
         file = BytesIO(response.content)
         file.name = "cover.jpg"
         return file
-        
+
     def SaveImage(self, path, page, imageType):
         # If the image already exists, pass
         if os.path.isfile(path):
@@ -62,7 +65,7 @@ class Book:
         url = "https://i.nhentai.net/galleries/" + str(self.media_id) + "/" + str(page) + imageType
         # Example url: https://i.nhentai.net/galleries/770497/8.jpg
         # Download the image
-        response = requests.get(url, verify=False)
+        response = requests.get(url, verify=ApiConfig.verify_ssl)
         if response.status_code != RESPONSE_OK:
             print("Error downloading " + url)
             print("Error code: " + str(response.status_code))
@@ -104,26 +107,15 @@ class Book:
         imageDownloader.shutdown()
 
 # Method to create a book. Must be outside a class to avoid python's multithreading headaches
-def CreateBook(id, bookList, i):
-    bookList[i] = Book(id)
+
 
 class Search:
-    # Make a query to nhentai about a certain search query and other parameters
-    # Example url: https://nhentai.net/api/galleries/search?query=females%20only&page=2&sort=popular
-    def GetSearchInfo(self):
-        sort = "popular" if self.popular else ""
-        url = "http://nhentai.net/api/galleries/search?query=" + self.query + "&page=" + str(self.page) + "&sort=" + sort
-
-        resp = requests.get(url=url, verify=False)
-        data = resp.json()
-        return data
-
     # Initialize information about a certain query and all the books in that page
-    def __init__(self, query, page, popular=False):
+    def __init__(self, query, page=1, popular=False):
         self.query = query
         self.popular = popular
         self.page = page
-        self.searchInfo = self.GetSearchInfo()
+        self.searchInfo = self.get_search_info()
         self.result = self.searchInfo["result"]
         self.books = []
 
@@ -133,28 +125,40 @@ class Search:
 
         # Initialize books concurrently, as making all api requests asking about books with a single thread is slow
         for i, book in enumerate(self.result):
-            executor.submit(CreateBook, book["id"], self.books, i)
+            executor.submit(Search.create_book, book["id"], self.books, i)
 
         # Wait for all books to be initialized properly. Could be optimized by proceeding with the ones that are done?
         executor.shutdown()
 
+    # Make a query to nhentai about a certain search query and other parameters
+    # Example url: https://nhentai.net/api/galleries/search?query=females%20only&page=2&sort=popular
+    def get_search_info(self):
+        sort = "popular" if self.popular else ""
+        url = f"https://nhentai.net/api/galleries/search?query={self.query}&page={self.page}&sort={sort}"
+
+        resp = requests.get(url=url, verify=ApiConfig.verify_ssl)
+        data = resp.json()
+        return data
+
+    # Method for creating a book (used in multithreading)
+    @staticmethod
+    def create_book(book_id, book_list, i):
+        book_list[i] = Book(book_id)
 
 
-    def SaveBook(self, book, dir):
+    @staticmethod
+    def save_book(book, directory):
         # Multithread the book downloading
-        imageDownloader = ThreadPoolExecutor(book.page_count)
+        image_downloader = ThreadPoolExecutor(book.page_count)
 
         # The method we call is __call__ of book, which is a wrapper for calling SaveImage
         for page in range(book.page_count):
-            imageDownloader.submit(book, dir + "/" + str(page + 1), page + 1)
+            image_downloader.submit(book, f"{directory}/{page + 1}", page + 1)
 
-        imageDownloader.shutdown()
+        image_downloader.shutdown()
 
-    # Same as in Book, this is a wrapper allowing the SaveBook method to be called concurrently
-    def __call__(self, book, dir):
-        self.SaveBook(book, dir)
 
-    def DownloadBooks(self, directory):
+    def download_books(self, directory):
         executor = ThreadPoolExecutor(len(self.books))
 
         for i, book in enumerate(self.books):
@@ -164,17 +168,17 @@ class Search:
 
             # Remove illegal characters illegal for files/ folder in windows
             name = book.name
-            blackList = ["/","\\",":","*","?","\"","<",">","|"]
-            for i in blackList:
-                name = name.replace(i, "")
-            dir = directory + name
+            black_list = ["/","\\",":","*","?","\"","<",">","|"]
+            for letter in black_list:
+                name = name.replace(letter, "")
+            file_path = f"{directory}/{name}"
 
             # Create a folder for the book if it does not exist
-            if not os.path.exists(dir):
-                os.makedirs(dir)
+            if not os.path.exists(file_path):
+                os.makedirs(file_path)
 
             # Start downloading the book concurrently
-            executor.submit(self, book, dir)
+            executor.submit(Search.save_book, book, file_path)
 
         # Wait for all downloads to finish
         executor.shutdown()

@@ -178,6 +178,10 @@ class Search:
         return data
 
 
+    def go_to_page(self, page):
+        self.__init__(self.query, page, self.popular)
+
+
     # Method for creating a book (used in multithreading)
     @staticmethod
     def create_book(book_info, book_list, i):

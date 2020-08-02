@@ -151,6 +151,8 @@ class Search:
         self.page = page
         self.search_info = self.get_search_info()
         self.result = self.search_info["result"]
+        self.page_amount = self.search_info["num_pages"]
+        self.books_per_page = self.search_info["per_page"]
         self.books = []
 
         executor = ThreadPoolExecutor(len(self.result))

@@ -1,5 +1,6 @@
 import requests
 import os
+import time
 from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor
 
@@ -8,6 +9,7 @@ RESPONSE_BUSY = 503
 
 class ApiConfig:
     verify_ssl = True
+    retry_wait_time = 0.5
 
 class Book:
     book_info: dict
@@ -35,9 +37,13 @@ class Book:
                 return ""
 
     # Initialize a book given a book id
-    def __init__(self, book_id):
-        self.book_id = book_id
-        self.book_info = self.get_book_info()
+    def __init__(self, book_id, book_info=None):
+        if book_info is None:
+            self.book_id = book_id
+            self.book_info = self.get_book_info()
+        else:
+            self.book_id = book_info["id"]
+            self.book_info = book_info
         self.bad = False
 
         # If we failed for some reason, set the bad flag to True, signalling that this book can not be downloaded
@@ -57,7 +63,7 @@ class Book:
         if page == 0:
             image_type = self.book_info["images"]["thumbnail"]["t"]
         else:
-            image_type = self.book_info["images"]["pages"][page]["t"]
+            image_type = self.book_info["images"]["pages"][page - 1]["t"]
 
         if image_type == "j":
             return "jpg"
@@ -78,25 +84,36 @@ class Book:
 
     @staticmethod
     def save_image_full(media_id, path, page, image_type):
-        # If the image already exists, pass
-        if os.path.isfile(path):
-            return
+        try:
+            # If the image already exists, pass
+            if os.path.isfile(path):
+                return
 
-        url = f"https://{'t' if page == 0 else 'i'}.nhentai.net/galleries/{media_id}/{'cover' if page == 0 else page}.{image_type}"
-        # Example url: https://i.nhentai.net/galleries/770497/8.jpg
-        # Download the image
-        response = requests.get(url, verify=ApiConfig.verify_ssl)
+            url = f"https://{'t' if page == 0 else 'i'}.nhentai.net/galleries/{media_id}/{'cover' if page == 0 else page}.{image_type}"
+            # Example url: https://i.nhentai.net/galleries/770497/8.jpg
+            # Download the image
+            response = requests.get(url, verify=ApiConfig.verify_ssl)
 
-        if response.status_code != RESPONSE_OK:
-            print(f"Error downloading {url}\nError code: {response.status_code}\nMedia id: {media_id}\nImage type: {image_type}")
-            return
+            # If we get a 503, wait and try again
+            while True:
+                if response.status_code == RESPONSE_BUSY:
+                    time.sleep(ApiConfig.retry_wait_time)
+                    response = requests.get(url, verify=ApiConfig.verify_ssl)
+                else:
+                    break
 
+            if response.status_code != RESPONSE_OK:
+                print(f"Error downloading {url}\nError code: {response.status_code}\nMedia id: {media_id}\nImage type: {image_type}")
+                return
 
-        if not os.path.exists(os.path.dirname(path)):
-            os.makedirs(os.path.dirname(path))
+            if not os.path.exists(os.path.dirname(path)):
+                os.makedirs(os.path.dirname(path))
 
-        with open(path, 'wb') as file:
-            file.write(response.content)
+            with open(path, 'wb') as file:
+                file.write(response.content)
+
+        except Exception as e:
+            print(e)
 
 
 
@@ -117,7 +134,7 @@ class Book:
         image_downloader = ThreadPoolExecutor(self.page_count)
 
         # The method we call is __call__ of book, which is a wrapper for calling SaveImage
-        for page in range(self.page_count):
+        for page in range(self.page_count + 1):
             image_downloader.submit(Book.save_image_full, self.media_id, f"{path}/{self.name}/{'cover' if page == 0 else page}.{self.get_image_type(page)}", page, self.get_image_type(page))
 
         image_downloader.shutdown()
@@ -131,8 +148,8 @@ class Search:
         self.query = query
         self.popular = popular
         self.page = page
-        self.searchInfo = self.get_search_info()
-        self.result = self.searchInfo["result"]
+        self.search_info = self.get_search_info()
+        self.result = self.search_info["result"]
         self.books = []
 
         executor = ThreadPoolExecutor(len(self.result))
@@ -141,10 +158,11 @@ class Search:
 
         # Initialize books concurrently, as making all api requests asking about books with a single thread is slow
         for i, book in enumerate(self.result):
-            executor.submit(Search.create_book, book["id"], self.books, i)
+            executor.submit(Search.create_book, self.search_info["result"][i], self.books, i)
 
         # Wait for all books to be initialized properly. Could be optimized by proceeding with the ones that are done?
         executor.shutdown()
+
 
     # Make a query to nhentai about a certain search query and other parameters
     # Example url: https://nhentai.net/api/galleries/search?query=females%20only&page=2&sort=popular
@@ -156,10 +174,11 @@ class Search:
         data = resp.json()
         return data
 
+
     # Method for creating a book (used in multithreading)
     @staticmethod
-    def create_book(book_id, book_list, i):
-        book_list[i] = Book(book_id)
+    def create_book(book_info, book_list, i):
+        book_list[i] = Book(-1, book_info=book_info)
 
 
     @staticmethod
@@ -168,8 +187,8 @@ class Search:
         image_downloader = ThreadPoolExecutor(book.page_count)
 
         # The method we call is __call__ of book, which is a wrapper for calling SaveImage
-        for page in range(book.page_count):
-            image_downloader.submit(book, f"{directory}/{page + 1}", page + 1)
+        for page in range(book.page_count + 1):
+            image_downloader.submit(Book.save_image_full, book.media_id, f"{directory}/{page}.{book.get_image_type(page)}", page, book.get_image_type(page))
 
         image_downloader.shutdown()
 

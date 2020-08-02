@@ -10,13 +10,15 @@ class ApiConfig:
     verify_ssl = True
 
 class Book:
+    book_info: dict
+
     # Get some info about the book via an api call about the book, which will grant info such as media id and page count
     # Example: https://nhentai.net/api/gallery/233960
-    def GetBookInfo(self):
+    def get_book_info(self):
 
         while True:
             url = "https://nhentai.net/api/gallery/" + str(self.book_id)
-            resp = requests.get(url=url, verify=ApiConfig.verify_ssl, headers = {'User-agent': 'Nhentai-api'})
+            resp = requests.get(url=url, verify=ApiConfig.verify_ssl)
 
             # The response will be the html of the response page
             # If we are good to go, return the json
@@ -33,9 +35,9 @@ class Book:
                 return ""
 
     # Initialize a book given a book id
-    def __init__(self, bookId):
-        self.book_id = bookId
-        self.book_info = self.GetBookInfo()
+    def __init__(self, book_id):
+        self.book_id = book_id
+        self.book_info = self.get_book_info()
         self.bad = False
 
         # If we failed for some reason, set the bad flag to True, signalling that this book can not be downloaded
@@ -50,61 +52,75 @@ class Book:
         self.page_count = self.book_info["num_pages"]
         self.name = self.book_info["title"]["english"]
 
-    def GetCover(self):
+
+    def get_image_type(self, page):
+        if page == 0:
+            image_type = self.book_info["images"]["thumbnail"]["t"]
+        else:
+            image_type = self.book_info["images"]["pages"][page]["t"]
+
+        if image_type == "j":
+            return "jpg"
+        elif image_type == "p":
+            return "png"
+        else:
+            print(f"Unknown image type \"f{image_type}\" on page {page}")
+            return "jpg"
+
+
+    def get_cover(self):
         url = f"https://t.nhentai.net/galleries/{self.media_id}/cover.jpg"
         response = requests.get(url, verify=ApiConfig.verify_ssl)
         file = BytesIO(response.content)
         file.name = "cover.jpg"
         return file
 
-    def SaveImage(self, path, page, imageType):
+
+    @staticmethod
+    def save_image_full(media_id, path, page, image_type):
         # If the image already exists, pass
         if os.path.isfile(path):
             return
 
-        url = "https://i.nhentai.net/galleries/" + str(self.media_id) + "/" + str(page) + imageType
+        url = f"https://{'t' if page == 0 else 'i'}.nhentai.net/galleries/{media_id}/{'cover' if page == 0 else page}.{image_type}"
         # Example url: https://i.nhentai.net/galleries/770497/8.jpg
         # Download the image
         response = requests.get(url, verify=ApiConfig.verify_ssl)
+
         if response.status_code != RESPONSE_OK:
-            print("Error downloading " + url)
-            print("Error code: " + str(response.status_code))
-            print("Book id: " + str(self.book_id))
-            print("Image type: " + self.book_info["images"]["pages"][page - 1]["t"])
+            print(f"Error downloading {url}\nError code: {response.status_code}\nMedia id: {media_id}\nImage type: {image_type}")
+            return
+
+
+        if not os.path.exists(os.path.dirname(path)):
+            os.makedirs(os.path.dirname(path))
 
         with open(path, 'wb') as file:
             file.write(response.content)
 
+
+
+    def save_image(self, path, page):
+        save_image(self.media_id, path, page, self.get_image_link(page))
+
+
     def get_image_link(self, page):
         if page == 0:
-            return f"https://t.nhentai.net/galleries/{self.media_id}/cover.jpg"
+            return f"https://t.nhentai.net/galleries/{self.media_id}/cover.{self.get_image_type(0)}"
         else:
-            image_type = self.book_info["images"]["pages"][page - 1]["t"]
-            image_type = "jpg" if image_type == "j" else "png"
-            return f"https://i.nhentai.net/galleries/{self.media_id}/{page}.{image_type}"
+            return f"https://i.nhentai.net/galleries/{self.media_id}/{page}.{self.get_image_type(page)}"
 
-    # A method for calling saveImage, has to be this way as python cannot pickle class members
-    # Here Book is also a function, which when called downloads a book of the provided id
-    def __call__(self, dir, page):
-        # Get the image type of the current page in the book
-        # We index with page - 1 because arrays start at 0 and nhentai books do not
-        type = self.book_info["images"]["pages"][page - 1]["t"]
-        type = ".jpg" if type == "j" else ".png"
-
-        # Save the image
-        self.SaveImage(dir + type, page, type)
-
-    def SaveAllImages(self, path):
+    def save_all_images(self, path):
         if self.bad:
             return
         # Multithread the book downloading
-        imageDownloader = ThreadPoolExecutor(self.page_count)
+        image_downloader = ThreadPoolExecutor(self.page_count)
 
         # The method we call is __call__ of book, which is a wrapper for calling SaveImage
         for page in range(self.page_count):
-            imageDownloader.submit(self, path + "/" + str(page + 1), page + 1)
+            image_downloader.submit(Book.save_image_full, self.media_id, f"{path}/{self.name}/{'cover' if page == 0 else page}.{self.get_image_type(page)}", page, self.get_image_type(page))
 
-        imageDownloader.shutdown()
+        image_downloader.shutdown()
 
 # Method to create a book. Must be outside a class to avoid python's multithreading headaches
 
@@ -160,7 +176,6 @@ class Search:
 
     def download_books(self, directory):
         executor = ThreadPoolExecutor(len(self.books))
-
         for i, book in enumerate(self.books):
             # Do not save bad books
             if book.bad:

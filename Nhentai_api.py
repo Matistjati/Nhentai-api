@@ -103,10 +103,12 @@ class Book:
             response = requests.get(url, verify=ApiConfig.verify_ssl)
 
             # If we get a 503, wait and try again
+            retry_time = ApiConfig.retry_wait_time
             while True:
                 if response.status_code == RESPONSE_BUSY:
-                    time.sleep(ApiConfig.retry_wait_time)
+                    time.sleep(retry_time)
                     response = requests.get(url, verify=ApiConfig.verify_ssl)
+                    retry_time *= 1.5
                 else:
                     break
 

@@ -155,7 +155,8 @@ class Search:
         self.books_per_page = self.search_info["per_page"]
         self.books = []
 
-        executor = ThreadPoolExecutor(len(self.result))
+        # max(1, len(self.result)) is to make sure that the amount of workers is > 0, otherwise we get an error
+        executor = ThreadPoolExecutor(max(1, len(self.result)))
         # Fill our book list with empty entries, as we will initialize it concurrently
         self.books = [None] * len(self.result)
 

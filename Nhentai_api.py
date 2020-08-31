@@ -133,12 +133,21 @@ class Book:
     def save_all_images(self, path):
         if self.bad:
             return
+
+        name = self.name
+        black_list = ["/","\\",":","*","?","\"","<",">","|"]
+        for letter in black_list:
+            path = path.replace(letter, "")
+            name = name.replace(letter, "")
+
+        print(path)
+            
         # Multithread the book downloading
         image_downloader = ThreadPoolExecutor(self.page_count)
 
         # The method we call is __call__ of book, which is a wrapper for calling SaveImage
         for page in range(self.page_count + 1):
-            image_downloader.submit(Book.save_image_full, self.media_id, f"{path}/{self.name}/{'cover' if page == 0 else page}.{self.get_image_type(page)}", page, self.get_image_type(page))
+            image_downloader.submit(Book.save_image_full, self.media_id, f"{path}/{name}/{'cover' if page == 0 else page}.{self.get_image_type(page)}", page, self.get_image_type(page))
 
         image_downloader.shutdown()
 

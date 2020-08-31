@@ -139,8 +139,6 @@ class Book:
         for letter in black_list:
             path = path.replace(letter, "")
             name = name.replace(letter, "")
-
-        print(path)
             
         # Multithread the book downloading
         image_downloader = ThreadPoolExecutor(self.page_count)
